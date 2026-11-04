@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netdoctor"
+version = "0.1.0"
+description = "Explainable network quality diagnostics"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "tolte-ch" }]
+dependencies = []
+
+[project.scripts]
+netdoctor = "netdoctor.cli:main"
+
+[tool.setuptools.package-data]
+netdoctor = ["web/*.html"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

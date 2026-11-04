@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NetDoctor — 네트워크 품질 진단</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(17, 31, 49, .86);
+      --panel-2: #13263d;
+      --border: rgba(148, 180, 214, .18);
+      --text: #edf6ff;
+      --muted: #9fb1c5;
+      --cyan: #37d6c9;
+      --blue: #57a8ff;
+      --green: #72e59a;
+      --yellow: #ffd166;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .28);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 85% 0%, rgba(38, 103, 164, .28), transparent 34rem),
+        radial-gradient(circle at 10% 35%, rgba(23, 143, 132, .12), transparent 26rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif;
+      min-height: 100vh;
+    }
+    button, input, select { font: inherit; }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 56px; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 34px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: -.03em; }
+    .mark {
+      display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px;
+      color: #052420; background: linear-gradient(135deg, var(--green), var(--cyan));
+      box-shadow: 0 10px 30px rgba(55, 214, 201, .22); font-size: 22px;
+    }
+    .week { color: var(--muted); font-size: 13px; border: 1px solid var(--border); padding: 7px 11px; border-radius: 999px; }
+    .hero { display: grid; grid-template-columns: 1.25fr .75fr; gap: 22px; align-items: stretch; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 22px; box-shadow: var(--shadow); }
+    .intro { padding: 34px; }
+    .eyebrow { color: var(--cyan); font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 10px 0 10px; font-size: clamp(32px, 5vw, 52px); line-height: 1.08; letter-spacing: -.055em; }
+    .intro p { max-width: 650px; margin: 0 0 28px; color: var(--muted); line-height: 1.7; }
+    .controls { display: grid; grid-template-columns: 1fr 120px auto; gap: 10px; }
+    .field { background: #091728; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; color: var(--text); width: 100%; }
+    .primary { border: 0; border-radius: 12px; padding: 11px 18px; font-weight: 800; background: linear-gradient(135deg, var(--cyan), var(--blue)); color: #04131e; cursor: pointer; }
+    .primary:hover { filter: brightness(1.08); }
+    .primary:focus-visible, .field:focus-visible { outline: 3px solid rgba(87, 168, 255, .4); outline-offset: 2px; }
+    .status { padding: 30px; display: flex; flex-direction: column; justify-content: space-between; }
+    .status-title { color: var(--muted); font-size: 14px; }
+    .grade { font-size: 56px; line-height: 1; font-weight: 900; letter-spacing: -.05em; color: var(--green); margin: 14px 0 8px; }
+    .status p { color: var(--muted); line-height: 1.55; margin: 0; }
+    .badge { display: inline-flex; align-self: flex-start; margin-top: 24px; padding: 8px 11px; border-radius: 999px; background: rgba(114, 229, 154, .1); color: var(--green); font-size: 13px; font-weight: 700; }
+    .section-title { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin: 38px 2px 14px; }
+    h2 { font-size: 19px; margin: 0; letter-spacing: -.025em; }
+    .section-title span { color: var(--muted); font-size: 13px; }
+    .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .metric { padding: 20px; min-height: 142px; }
+    .metric-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .value { margin-top: 22px; font-size: 30px; font-weight: 850; letter-spacing: -.04em; }
+    .unit { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .range { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .lower { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
+    .services, .diagnosis { padding: 26px; }
+    .service { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+    .service:last-child { border-bottom: 0; padding-bottom: 0; }
+    .service:first-of-type { padding-top: 8px; }
+    .service small { color: var(--muted); display: block; margin-top: 4px; }
+    .stars { color: var(--yellow); letter-spacing: 2px; white-space: nowrap; }
+    .diagnosis-box { margin-top: 15px; padding: 18px; background: var(--panel-2); border-left: 3px solid var(--cyan); border-radius: 10px; line-height: 1.65; }
+    .diagnosis-box strong { display: block; margin-bottom: 5px; }
+    .diagnosis-box p { margin: 0; color: var(--muted); font-size: 14px; }
+    .notice { margin-top: 15px; color: var(--yellow); font-size: 12px; line-height: 1.55; }
+    footer { margin-top: 30px; text-align: center; color: var(--muted); font-size: 12px; }
+    @media (max-width: 900px) {
+      .hero, .lower { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .shell { width: min(100% - 20px, 1180px); padding-top: 20px; }
+      .controls { grid-template-columns: 1fr 100px; }
+      .primary { grid-column: 1 / -1; }
+      .metrics { grid-template-columns: 1fr; }
+      .intro, .status { padding: 24px; }
+      .week { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><span class="mark">✚</span><span>NetDoctor</span></div>
+      <span class="week">Week 1 · Dashboard wireframe</span>
+    </header>
+
+    <section class="hero">
+      <div class="panel intro">
+        <div class="eyebrow">Network quality diagnostics</div>
+        <h1>인터넷 상태를<br>숫자보다 쉽게.</h1>
+        <p>DNS부터 다운로드까지 단계별로 측정하고, 느린 원인을 사용자가 이해할 수 있는 언어로 설명합니다.</p>
+        <div class="controls">
+          <input class="field" value="https://example.com" aria-label="측정 대상">
+          <select class="field" aria-label="반복 횟수"><option>5회</option><option>7회</option><option>10회</option></select>
+          <button class="primary" id="diagnose">진단 시작</button>
+        </div>
+      </div>
+      <aside class="panel status">
+        <div>
+          <div class="status-title">현재 네트워크 상태</div>
+          <div class="grade">좋음</div>
+          <p>주요 지표가 안정적인 범위입니다.<br>일반적인 온라인 활동에 충분합니다.</p>
+        </div>
+        <span class="badge">● 주요 병목 없음</span>
+      </aside>
+    </section>
+
+    <div class="section-title"><h2>핵심 측정값</h2><span>대표값: 중앙값 · 단위별 범위 표시</span></div>
+    <section class="metrics" aria-label="핵심 측정값">
+      <article class="panel metric"><div class="metric-label"><span>DNS</span><i class="dot"></i></div><div class="value">12.2 <span class="unit">ms</span></div><div class="range">11.8–13.1 ms</div></article>
+      <article class="panel metric"><div class="metric-label"><span>TCP 연결</span><i class="dot"></i></div><div class="value">20.8 <span class="unit">ms</span></div><div class="range">20.2–22.1 ms</div></article>
+      <article class="panel metric"><div class="metric-label"><span>TTFB</span><i class="dot"></i></div><div class="value">71.8 <span class="unit">ms</span></div><div class="range">69.2–75.1 ms</div></article>
+      <article class="panel metric"><div class="metric-label"><span>RTT</span><i class="dot"></i></div><div class="value">18.0 <span class="unit">ms</span></div><div class="range">17.5–19.1 ms</div></article>
+      <article class="panel metric"><div class="metric-label"><span>다운로드</span><i class="dot"></i></div><div class="value">72.1 <span class="unit">Mbps</span></div><div class="range">70.2–73.0 Mbps</div></article>
+    </section>
+
+    <div class="section-title"><h2>사용 경험 예측</h2><span>지표 조합에 근거한 설명</span></div>
+    <section class="lower">
+      <article class="panel services">
+        <div class="service"><div><strong>웹 브라우징</strong><small>DNS와 응답 시작 시간이 안정적입니다.</small></div><span class="stars">★★★★★</span></div>
+        <div class="service"><div><strong>1080p 스트리밍</strong><small>충분한 처리율 여유가 있습니다.</small></div><span class="stars">★★★★★</span></div>
+        <div class="service"><div><strong>4K 스트리밍</strong><small>다른 기기 사용량에 따라 달라질 수 있습니다.</small></div><span class="stars">★★★★☆</span></div>
+        <div class="service"><div><strong>화상회의</strong><small>RTT가 낮고 변동 폭이 작습니다.</small></div><span class="stars">★★★★★</span></div>
+      </article>
+      <article class="panel diagnosis">
+        <h2>NetDoctor의 설명</h2>
+        <div class="diagnosis-box"><strong>뚜렷한 병목이 보이지 않습니다.</strong><p>다운로드 처리율이 충분하고, DNS·TCP·RTT 측정값도 안정적입니다. 현재 상태에서는 1080p 영상과 화상회의를 원활하게 사용할 가능성이 높습니다.</p></div>
+        <p class="notice">※ 화면의 값은 1주차 UI 검토를 위한 예시이며 실제 네트워크 측정값이 아닙니다.</p>
+      </article>
+    </section>
+    <footer>NetDoctor does not inspect personal traffic. Measure only networks and servers you are authorized to test.</footer>
+  </main>
+  <script>
+    document.querySelector('#diagnose').addEventListener('click', (event) => {
+      const button = event.currentTarget;
+      button.textContent = '2주차에 연결 예정';
+      setTimeout(() => { button.textContent = '진단 시작'; }, 1800);
+    });
+  </script>
+</body>
+</html>

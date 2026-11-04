@@ -1,0 +1,12 @@
+{
+  "repetitions": 5,
+  "timeout_seconds": 5.0,
+  "pause_between_runs_seconds": 0.25,
+  "target": {
+    "name": "Example target",
+    "host": "example.com",
+    "tcp_port": 443,
+    "http_url": "https://example.com/",
+    "download_url": null
+  }
+}
