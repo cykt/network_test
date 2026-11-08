@@ -11,6 +11,8 @@ from typing import Sequence
 
 from .config import AppConfig, load_config
 from .models import RunResult
+from .engine import NetworkEngine
+from .analyzer import NetworkAnalyzer
 
 
 METRIC_PLAN = (
@@ -30,6 +32,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", help="JSON configuration path")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("plan", help="show the validated measurement plan")
+    run_cmd = commands.add_parser("run", help="perform real network measurements and diagnose")
+    run_cmd.add_argument("--json", action="store_true", help="emit raw and diagnosis JSON")
     demo = commands.add_parser("demo", help="show fictional data for contract validation")
     demo.add_argument("--json", action="store_true", help="emit the full JSON result")
     dashboard = commands.add_parser("dashboard", help="serve the dashboard wireframe")
@@ -64,11 +68,113 @@ def _print_demo(result: RunResult) -> None:
     print(f"\n주의: {result.notes[0]}")
 
 
-def _serve_dashboard(host: str, port: int) -> int:
+def _print_run(result: RunResult) -> None:
+    print(f"NetDoctor 실제 네트워크 측정 결과 [{result.started_at[:19]}]")
+    print(f"대상: {result.target_name} ({result.target_host}) | 반복: {result.repetitions_requested}회")
+    print("-" * 65)
+    for metric in result.metrics:
+        if metric.status == "success" and metric.summary:
+            s = metric.summary
+            print(
+                f"{metric.label:<10} 중앙값 {s.median:>7.1f} {metric.unit:<4} "
+                f"(최소 {s.minimum:>6.1f}, 최대 {s.maximum:>6.1f}, 표준편차 {s.standard_deviation:>5.1f})"
+            )
+        elif metric.status == "unavailable":
+            print(f"{metric.label:<10} [측정 생략] ({metric.error})")
+        else:
+            print(f"{metric.label:<10} [측정 실패] ({metric.error})")
+    print("-" * 65)
+
+    report = NetworkAnalyzer.analyze(result)
+    print(f"\n[종합 진단: {report.overall_grade}등급 ({report.overall_score}점)]")
+    print(f"상태 요약: {report.headline}")
+    print(f"상세 설명: {report.description}")
+    if report.bottlenecks:
+        print("\n[감지된 병목 지점]")
+        for b in report.bottlenecks:
+            print(f" • {b}")
+    print("\n[서비스별 적합도 예측]")
+    for svc in report.services:
+        mark = "✓" if svc.suitable else "✗"
+        print(f" {mark} {svc.name:<16} {svc.rating_stars} | {svc.summary} ({svc.evidence})")
+    print(f"\n주의: {report.uncertainty_note}")
+
+
+class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, default_config: AppConfig, **kwargs):
+        self.default_config = default_config
+        super().__init__(*args, **kwargs)
+
+    def do_POST(self):
+        if self.path == "/api/diagnose":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
+            try:
+                import json
+                from urllib.parse import urlparse
+                from .config import TargetConfig
+
+                payload = json.loads(body) if body else {}
+                target_url = payload.get("url", self.default_config.target.http_url)
+                reps = int(payload.get("repetitions", self.default_config.repetitions))
+                reps = max(5, min(10, reps))
+
+                parsed = urlparse(target_url if "://" in target_url else f"https://{target_url}")
+                host = parsed.hostname or self.default_config.target.host
+                scheme = parsed.scheme or "https"
+                tcp_port = parsed.port or (443 if scheme == "https" else 80)
+                http_url = f"{scheme}://{host}:{tcp_port}/" if parsed.port else f"{scheme}://{host}/"
+
+                active_target = TargetConfig(
+                    name=payload.get("name", host),
+                    host=host,
+                    tcp_port=tcp_port,
+                    http_url=http_url,
+                    download_url=self.default_config.target.download_url,
+                )
+                active_cfg = AppConfig(
+                    target=active_target,
+                    repetitions=reps,
+                    timeout_seconds=self.default_config.timeout_seconds,
+                    pause_between_runs_seconds=self.default_config.pause_between_runs_seconds,
+                )
+
+                engine = NetworkEngine(active_cfg)
+                run_res = engine.run()
+                diag = NetworkAnalyzer.analyze(run_res)
+
+                resp_data = {
+                    "run": json.loads(run_res.to_json()),
+                    "diagnosis": diag.to_dict(),
+                }
+                data_bytes = json.dumps(resp_data, ensure_ascii=False).encode("utf-8")
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(data_bytes)))
+                self.end_headers()
+                self.wfile.write(data_bytes)
+            except Exception as e:
+                err_data = json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(err_data)))
+                self.end_headers()
+                self.wfile.write(err_data)
+            return
+
+        super().do_POST()
+
+
+def _serve_dashboard(config: AppConfig, host: str, port: int) -> int:
     if not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     web_root = Path(__file__).resolve().parent / "web"
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(web_root))
+    handler = functools.partial(
+        DashboardRequestHandler,
+        directory=str(web_root),
+        default_config=config,
+    )
     try:
         server = http.server.ThreadingHTTPServer((host, port), handler)
     except OSError as error:
@@ -90,6 +196,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = load_config(args.config)
         if args.command == "plan":
             _print_plan(config)
+        elif args.command == "run":
+            engine = NetworkEngine(config)
+            result = engine.run()
+            if args.json:
+                report = NetworkAnalyzer.analyze(result)
+                import json
+                print(json.dumps({
+                    "run": json.loads(result.to_json()),
+                    "diagnosis": report.to_dict(),
+                }, indent=2, ensure_ascii=False))
+            else:
+                _print_run(result)
         elif args.command == "demo":
             result = RunResult.demo(
                 config.target.name,
@@ -101,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 _print_demo(result)
         elif args.command == "dashboard":
-            return _serve_dashboard(args.host, args.port)
+            return _serve_dashboard(config, args.host, args.port)
     except ValueError as error:
         print(f"설정 오류: {error}", file=sys.stderr)
         return 2
