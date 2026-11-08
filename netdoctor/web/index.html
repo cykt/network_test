@@ -17,6 +17,7 @@
       --blue: #57a8ff;
       --green: #72e59a;
       --yellow: #ffd166;
+      --red: #ff6b6b;
       --shadow: 0 24px 70px rgba(0, 0, 0, .28);
     }
     * { box-sizing: border-box; }
@@ -49,9 +50,9 @@
     .intro p { max-width: 650px; margin: 0 0 28px; color: var(--muted); line-height: 1.7; }
     .controls { display: grid; grid-template-columns: 1fr 120px auto; gap: 10px; }
     .field { background: #091728; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; color: var(--text); width: 100%; }
-    .primary { border: 0; border-radius: 12px; padding: 11px 18px; font-weight: 800; background: linear-gradient(135deg, var(--cyan), var(--blue)); color: #04131e; cursor: pointer; }
-    .primary:hover { filter: brightness(1.08); }
-    .primary:focus-visible, .field:focus-visible { outline: 3px solid rgba(87, 168, 255, .4); outline-offset: 2px; }
+    .primary { border: 0; border-radius: 12px; padding: 11px 22px; font-weight: 800; background: linear-gradient(135deg, var(--cyan), var(--blue)); color: #04131e; cursor: pointer; transition: all .2s ease; }
+    .primary:disabled { opacity: .6; cursor: not-allowed; filter: grayscale(0.5); }
+    .primary:not(:disabled):hover { filter: brightness(1.08); transform: translateY(-1px); }
     .status { padding: 30px; display: flex; flex-direction: column; justify-content: space-between; }
     .status-title { color: var(--muted); font-size: 14px; }
     .grade { font-size: 56px; line-height: 1; font-weight: 900; letter-spacing: -.05em; color: var(--green); margin: 14px 0 8px; }
@@ -61,10 +62,12 @@
     h2 { font-size: 19px; margin: 0; letter-spacing: -.025em; }
     .section-title span { color: var(--muted); font-size: 13px; }
     .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-    .metric { padding: 20px; min-height: 142px; }
+    .metric { padding: 20px; min-height: 142px; position: relative; overflow: hidden; }
     .metric-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
-    .value { margin-top: 22px; font-size: 30px; font-weight: 850; letter-spacing: -.04em; }
+    .dot.failed { background: var(--red); box-shadow: 0 0 12px var(--red); }
+    .dot.skipped { background: var(--muted); box-shadow: none; }
+    .value { margin-top: 22px; font-size: 28px; font-weight: 850; letter-spacing: -.04em; }
     .unit { font-size: 13px; color: var(--muted); font-weight: 500; }
     .range { color: var(--muted); font-size: 12px; margin-top: 8px; }
     .lower { display: grid; grid-template-columns: 1.15fr .85fr; gap: 14px; }
@@ -79,6 +82,7 @@
     .diagnosis-box p { margin: 0; color: var(--muted); font-size: 14px; }
     .notice { margin-top: 15px; color: var(--yellow); font-size: 12px; line-height: 1.55; }
     footer { margin-top: 30px; text-align: center; color: var(--muted); font-size: 12px; }
+    .history-card { margin-top: 20px; font-size: 13px; color: var(--muted); }
     @media (max-width: 900px) {
       .hero, .lower { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(2, 1fr); }
@@ -97,7 +101,7 @@
   <main class="shell">
     <header>
       <div class="brand"><span class="mark">✚</span><span>NetDoctor</span></div>
-      <span class="week">Week 1 · Dashboard wireframe</span>
+      <span class="week" id="status-tag">통합 진단 대시보드</span>
     </header>
 
     <section class="hero">
@@ -106,52 +110,179 @@
         <h1>인터넷 상태를<br>숫자보다 쉽게.</h1>
         <p>DNS부터 다운로드까지 단계별로 측정하고, 느린 원인을 사용자가 이해할 수 있는 언어로 설명합니다.</p>
         <div class="controls">
-          <input class="field" value="https://example.com" aria-label="측정 대상">
-          <select class="field" aria-label="반복 횟수"><option>5회</option><option>7회</option><option>10회</option></select>
+          <input class="field" id="target-input" value="https://example.com" aria-label="측정 대상">
+          <select class="field" id="reps-select" aria-label="반복 횟수">
+            <option value="5" selected>5회 반복</option>
+            <option value="7">7회 반복</option>
+            <option value="10">10회 반복</option>
+          </select>
           <button class="primary" id="diagnose">진단 시작</button>
         </div>
       </div>
       <aside class="panel status">
         <div>
           <div class="status-title">현재 네트워크 상태</div>
-          <div class="grade">좋음</div>
-          <p>주요 지표가 안정적인 범위입니다.<br>일반적인 온라인 활동에 충분합니다.</p>
+          <div class="grade" id="overall-grade">준비됨</div>
+          <p id="overall-desc">대상을 지정하고 '진단 시작' 버튼을 누르면 실제 정밀 측정을 진행합니다.</p>
         </div>
-        <span class="badge">● 주요 병목 없음</span>
+        <span class="badge" id="bottleneck-badge">● 대기 중</span>
       </aside>
     </section>
 
-    <div class="section-title"><h2>핵심 측정값</h2><span>대표값: 중앙값 · 단위별 범위 표시</span></div>
-    <section class="metrics" aria-label="핵심 측정값">
-      <article class="panel metric"><div class="metric-label"><span>DNS</span><i class="dot"></i></div><div class="value">12.2 <span class="unit">ms</span></div><div class="range">11.8–13.1 ms</div></article>
-      <article class="panel metric"><div class="metric-label"><span>TCP 연결</span><i class="dot"></i></div><div class="value">20.8 <span class="unit">ms</span></div><div class="range">20.2–22.1 ms</div></article>
-      <article class="panel metric"><div class="metric-label"><span>TTFB</span><i class="dot"></i></div><div class="value">71.8 <span class="unit">ms</span></div><div class="range">69.2–75.1 ms</div></article>
-      <article class="panel metric"><div class="metric-label"><span>RTT</span><i class="dot"></i></div><div class="value">18.0 <span class="unit">ms</span></div><div class="range">17.5–19.1 ms</div></article>
-      <article class="panel metric"><div class="metric-label"><span>다운로드</span><i class="dot"></i></div><div class="value">72.1 <span class="unit">Mbps</span></div><div class="range">70.2–73.0 Mbps</div></article>
+    <div class="section-title"><h2>핵심 측정값</h2><span id="metric-sub">대표값: 중앙값 · 단위별 범위 표시</span></div>
+    <section class="metrics" id="metrics-grid" aria-label="핵심 측정값">
+      <article class="panel metric" id="m-dns"><div class="metric-label"><span>DNS</span><i class="dot skipped"></i></div><div class="value">- <span class="unit">ms</span></div><div class="range">대기 중</div></article>
+      <article class="panel metric" id="m-tcp"><div class="metric-label"><span>TCP 연결</span><i class="dot skipped"></i></div><div class="value">- <span class="unit">ms</span></div><div class="range">대기 중</div></article>
+      <article class="panel metric" id="m-ttfb"><div class="metric-label"><span>TTFB</span><i class="dot skipped"></i></div><div class="value">- <span class="unit">ms</span></div><div class="range">대기 중</div></article>
+      <article class="panel metric" id="m-ping"><div class="metric-label"><span>RTT</span><i class="dot skipped"></i></div><div class="value">- <span class="unit">ms</span></div><div class="range">대기 중</div></article>
+      <article class="panel metric" id="m-download"><div class="metric-label"><span>다운로드</span><i class="dot skipped"></i></div><div class="value">- <span class="unit">Mbps</span></div><div class="range">대기 중</div></article>
     </section>
 
     <div class="section-title"><h2>사용 경험 예측</h2><span>지표 조합에 근거한 설명</span></div>
     <section class="lower">
-      <article class="panel services">
-        <div class="service"><div><strong>웹 브라우징</strong><small>DNS와 응답 시작 시간이 안정적입니다.</small></div><span class="stars">★★★★★</span></div>
-        <div class="service"><div><strong>1080p 스트리밍</strong><small>충분한 처리율 여유가 있습니다.</small></div><span class="stars">★★★★★</span></div>
-        <div class="service"><div><strong>4K 스트리밍</strong><small>다른 기기 사용량에 따라 달라질 수 있습니다.</small></div><span class="stars">★★★★☆</span></div>
-        <div class="service"><div><strong>화상회의</strong><small>RTT가 낮고 변동 폭이 작습니다.</small></div><span class="stars">★★★★★</span></div>
+      <article class="panel services" id="services-list">
+        <div class="service"><div><strong>웹 브라우징</strong><small>진단 대기 중</small></div><span class="stars">☆☆☆☆☆</span></div>
+        <div class="service"><div><strong>1080p 스트리밍</strong><small>진단 대기 중</small></div><span class="stars">☆☆☆☆☆</span></div>
+        <div class="service"><div><strong>4K 스트리밍</strong><small>진단 대기 중</small></div><span class="stars">☆☆☆☆☆</span></div>
+        <div class="service"><div><strong>화상회의</strong><small>진단 대기 중</small></div><span class="stars">☆☆☆☆☆</span></div>
       </article>
       <article class="panel diagnosis">
         <h2>NetDoctor의 설명</h2>
-        <div class="diagnosis-box"><strong>뚜렷한 병목이 보이지 않습니다.</strong><p>다운로드 처리율이 충분하고, DNS·TCP·RTT 측정값도 안정적입니다. 현재 상태에서는 1080p 영상과 화상회의를 원활하게 사용할 가능성이 높습니다.</p></div>
-        <p class="notice">※ 화면의 값은 1주차 UI 검토를 위한 예시이며 실제 네트워크 측정값이 아닙니다.</p>
+        <div class="diagnosis-box" id="diag-box">
+          <strong id="diag-headline">진단 대기 중</strong>
+          <p id="diag-body">측정을 시작하면 네트워크 지표 분석을 기반으로 종합적인 설명이 제공됩니다.</p>
+        </div>
+        <p class="notice" id="diag-notice">※ 본인이 권한을 가진 네트워크와 호스트만 측정합니다.</p>
+        <div class="history-card" id="history-box"></div>
       </article>
     </section>
     <footer>NetDoctor does not inspect personal traffic. Measure only networks and servers you are authorized to test.</footer>
   </main>
+
   <script>
-    document.querySelector('#diagnose').addEventListener('click', (event) => {
-      const button = event.currentTarget;
-      button.textContent = '2주차에 연결 예정';
-      setTimeout(() => { button.textContent = '진단 시작'; }, 1800);
-    });
+    const btn = document.querySelector('#diagnose');
+    const targetInput = document.querySelector('#target-input');
+    const repsSelect = document.querySelector('#reps-select');
+
+    function updateMetricCard(id, metric) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const dot = el.querySelector('.dot');
+      const val = el.querySelector('.value');
+      const range = el.querySelector('.range');
+
+      if (!metric || metric.status === 'unavailable') {
+        dot.className = 'dot skipped';
+        val.innerHTML = `생략 <span class="unit">${metric ? metric.unit : ''}</span>`;
+        range.textContent = metric && metric.error ? metric.error : '미설정';
+      } else if (metric.status === 'failed') {
+        dot.className = 'dot failed';
+        val.innerHTML = `실패 <span class="unit">${metric.unit}</span>`;
+        range.textContent = metric.error || '오류 발생';
+      } else {
+        dot.className = 'dot';
+        const s = metric.summary;
+        val.innerHTML = `${s.median.toFixed(1)} <span class="unit">${metric.unit}</span>`;
+        range.textContent = `${s.minimum.toFixed(1)}–${s.maximum.toFixed(1)} ${metric.unit} (표준편차 ${s.standard_deviation.toFixed(1)})`;
+      }
+    }
+
+    async function runDiagnosis() {
+      btn.disabled = true;
+      btn.textContent = '진단 측정 중... (잠시 대기)';
+      document.querySelector('#status-tag').textContent = '측정 진행 중';
+
+      try {
+        const payload = {
+          url: targetInput.value.trim(),
+          repetitions: parseInt(repsSelect.value, 10)
+        };
+        const res = await fetch('/api/diagnose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        }
+        const data = await res.json();
+        renderResults(data);
+      } catch (err) {
+        alert('진단 요청 중 오류 발생: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '진단 시작';
+        document.querySelector('#status-tag').textContent = '진단 완료';
+      }
+    }
+
+    function renderResults(data) {
+      const run = data.run;
+      const diag = data.diagnosis;
+
+      // 1. 상태 및 등급
+      const gradeEl = document.getElementById('overall-grade');
+      gradeEl.textContent = diag.overall_grade;
+      if (diag.overall_grade === '최상' || diag.overall_grade === '양호') {
+        gradeEl.style.color = 'var(--green)';
+      } else if (diag.overall_grade === '주의') {
+        gradeEl.style.color = 'var(--yellow)';
+      } else {
+        gradeEl.style.color = 'var(--red)';
+      }
+      document.getElementById('overall-desc').textContent = diag.headline;
+      const badge = document.getElementById('bottleneck-badge');
+      if (diag.bottlenecks.length === 0) {
+        badge.textContent = '● 주요 병목 없음';
+        badge.style.color = 'var(--green)';
+        badge.style.background = 'rgba(114, 229, 154, .1)';
+      } else {
+        badge.textContent = `● 병목 ${diag.bottlenecks.length}건 감지`;
+        badge.style.color = 'var(--yellow)';
+        badge.style.background = 'rgba(255, 209, 102, .1)';
+      }
+
+      // 2. 메트릭 카드
+      const metricsMap = {};
+      run.metrics.forEach(m => { metricsMap[m.key] = m; });
+      updateMetricCard('m-dns', metricsMap['dns']);
+      updateMetricCard('m-tcp', metricsMap['tcp']);
+      updateMetricCard('m-ttfb', metricsMap['ttfb']);
+      updateMetricCard('m-ping', metricsMap['ping']);
+      updateMetricCard('m-download', metricsMap['download']);
+
+      // 3. 서비스 예측
+      const servicesContainer = document.getElementById('services-list');
+      servicesContainer.innerHTML = diag.services.map(s => `
+        <div class="service">
+          <div>
+            <strong>${s.name}</strong>
+            <small>${s.summary} (${s.evidence})</small>
+          </div>
+          <span class="stars">${s.rating_stars}</span>
+        </div>
+      `).join('');
+
+      // 4. 설명 상자
+      document.getElementById('diag-headline').textContent = diag.headline;
+      document.getElementById('diag-body').innerHTML = `
+        ${diag.description}
+        ${diag.bottlenecks.length > 0 ? `<ul style="margin: 8px 0 0 18px; padding: 0;">${diag.bottlenecks.map(b => `<li>${b}</li>`).join('')}</ul>` : ''}
+      `;
+      document.getElementById('diag-notice').textContent = '※ ' + diag.uncertainty_note;
+
+      // 5. 로컬스토리지 기록 및 이전 결과 비교
+      try {
+        const lastRun = localStorage.getItem('netdoctor_last_score');
+        const historyEl = document.getElementById('history-box');
+        if (lastRun) {
+          historyEl.textContent = `이전 측정 점수: ${lastRun}점 ➔ 현재 측정 점수: ${diag.overall_score}점`;
+        }
+        localStorage.setItem('netdoctor_last_score', diag.overall_score);
+      } catch (e) {}
+    }
+
+    btn.addEventListener('click', runDiagnosis);
   </script>
 </body>
 </html>
